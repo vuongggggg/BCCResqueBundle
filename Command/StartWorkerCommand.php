@@ -21,6 +21,8 @@ class StartWorkerCommand extends ContainerAwareCommand
             ->addOption('interval', 'i', InputOption::VALUE_REQUIRED, 'How often to check for new jobs across the queues', 5)
             ->addOption('foreground', 'f', InputOption::VALUE_NONE, 'Should the worker run in foreground')
             ->addOption('memory-limit', 'm', InputOption::VALUE_REQUIRED, 'Force cli memory_limit (expressed in Mbytes)')
+	    ->addOption('verbose', 'v', InputOption::VALUE_REQUIRED, 'Records more information than the usual logging mode', 1)
+            ->addOption('quite', 'q', InputOption::VALUE_REQUIRED, 'Disable all logs', 0)
         ;
     }
 
@@ -45,7 +47,9 @@ class StartWorkerCommand extends ContainerAwareCommand
         $env['COUNT']       = $input->getOption('count');
         $env['INTERVAL']    = $input->getOption('interval');
         $env['QUEUE']       = $input->getArgument('queues');
-        $env['VERBOSE']     = 1;
+        $env['VERBOSE']     = $input->getOption('verbose');
+	
+	$isQuite = $input->getOption('quiet');
 
         $prefix = $this->getContainer()->getParameter('bcc_resque.prefix');
         if (!empty($prefix)) {
@@ -56,7 +60,7 @@ class StartWorkerCommand extends ContainerAwareCommand
             $env['VVERBOSE'] = 1;
         }
 
-        if ($input->getOption('quiet')) {
+        if ($isQuite) {
             unset($env['VERBOSE']);
         }
 
@@ -92,7 +96,7 @@ class StartWorkerCommand extends ContainerAwareCommand
             '%dir%' => __DIR__.'/../bin',
         ));
 
-        if (!$input->getOption('foreground')) {
+        if (!$input->getOption('foreground') && !$isQuite) {
             $workerCommand = strtr('nohup %cmd% > %logs_dir%/resque.log 2>&1 & echo $!', array(
                 '%cmd%'      => $workerCommand,
                 '%logs_dir%' => $this->getContainer()->getParameter('kernel.logs_dir'),
@@ -100,15 +104,15 @@ class StartWorkerCommand extends ContainerAwareCommand
         }
 
 
-		// In windows: When you pass an environment to CMD it replaces the old environment
-		// That means we create a lot of problems with respect to user accounts and missing vars
-		// this is a workaround where we add the vars to the existing environment.
-		if (defined('PHP_WINDOWS_VERSION_BUILD')) {
-			foreach($env as $key => $value) {
-				putenv($key."=". $value);
-			}
-			$env = null;
+	// In windows: When you pass an environment to CMD it replaces the old environment
+	// That means we create a lot of problems with respect to user accounts and missing vars
+	// this is a workaround where we add the vars to the existing environment.
+	if (defined('PHP_WINDOWS_VERSION_BUILD')) {
+		foreach($env as $key => $value) {
+			putenv($key."=". $value);
 		}
+		$env = null;
+	}
 
         $process = new Process($workerCommand, null, $env, null, null);
 
